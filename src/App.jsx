@@ -55,6 +55,8 @@ export default function App() {
   const [points,setPoints] = useState(100)
   const [amount,setAmount] = useState(4800)
 
+  // Clean up legacy CRM data from the first prototype; no contact records are retained.
+  useEffect(()=>{ try { localStorage.removeItem('swclient_clients'); localStorage.removeItem('swclient_name') } catch {} },[])
   useEffect(()=>{ if(!toast)return;const t=setTimeout(()=>setToast(''),2900);return()=>clearTimeout(t) },[toast])
   function go(next) { setView(next);setMobileOpen(false);setQuery('');window.scrollTo({top:0,behavior:'smooth'}) }
   function goScript(audience) {setScriptAudience(audience || 'all');setOnlyFavorites(false);go('scripts')}
