@@ -26,6 +26,8 @@ jobs:
           node-version: '22'
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Runtime render smoke test
+        run: npm run test:smoke
       - name: Build
         run: npm run build
       - name: Upload website
