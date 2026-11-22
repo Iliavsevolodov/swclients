@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import * as Icon from 'lucide-react'
-import { audiences, scripts, objections, faqs, journey, benefits, programSource } from './data'
+import { audiences, scripts, scriptSituations } from './libraryData'
+import { objections, faqs, benefits, programSource } from './data'
 
 const MENU = [
   {id:'dashboard',title:'Обзор',icon:'LayoutDashboard'},
@@ -10,7 +11,6 @@ const MENU = [
   {id:'benefits',title:'Выгоды и бонусы',icon:'Gift'},
   {id:'objections',title:'Работа с возражениями',icon:'MessageCircleQuestion'},
   {id:'faq',title:'База знаний / FAQ',icon:'BookOpenText'},
-  {id:'plan',title:'План на 7 дней',icon:'CalendarCheck2'},
 ]
 function I({name,size=18,...props}) { const Component=Icon[name] || Icon.Sparkles; return <Component size={size} strokeWidth={1.85} {...props} /> }
 function storeState(key, initial) {
@@ -27,14 +27,15 @@ function Empty({icon='SearchX',title,description,action}) {return <div className
 function MiniLogo() { return <div className="logo-mark"><I name="Snowflake" size={25} strokeWidth={1.4}/></div> }
 function Badge({children,tone=''}) { return <span className={'badge '+tone}>{children}</span> }
 
-export default function App() {
-  const [view,setView] = useState('dashboard')
+export default function App({initialView = 'dashboard'} = {}) {
+  const [view,setView] = useState(initialView)
   const [mobileOpen,setMobileOpen] = useState(false)
   const [query,setQuery] = useState('')
   const [favoriteIds,setFavoriteIds] = storeState('favorites',[])
-  const [completed,setCompleted] = storeState('journey',[])
   const [toast,setToast] = useState('')
   const [selectedAudience,setSelectedAudience] = useState(null)
+  const [categorySearch,setCategorySearch] = useState('')
+  const [pickCategorySearch,setPickCategorySearch] = useState('')
   const [pickAudience,setPickAudience] = useState('friends')
   const [pickGoal,setPickGoal] = useState('first')
   const [pickLength,setPickLength] = useState('short')
@@ -42,6 +43,8 @@ export default function App() {
   const [pickInterest,setPickInterest] = useState('')
   const [pickDraft,setPickDraft] = useState('')
   const [scriptAudience,setScriptAudience] = useState('all')
+  const [scriptScenario,setScriptScenario] = useState('all')
+  const [scriptLimit,setScriptLimit] = useState(12)
   const [scriptTerm,setScriptTerm] = useState('')
   const [scriptMode,setScriptMode] = useState('full')
   const [personalName,setPersonalName] = useState('')
@@ -60,7 +63,7 @@ export default function App() {
   useEffect(()=>{ try { localStorage.removeItem('swclient_clients'); localStorage.removeItem('swclient_name') } catch {} },[])
   useEffect(()=>{ if(!toast)return;const t=setTimeout(()=>setToast(''),2900);return()=>clearTimeout(t) },[toast])
   function go(next) { setView(next);setMobileOpen(false);setQuery('');window.scrollTo({top:0,behavior:'smooth'}) }
-  function goScript(audience) {setScriptAudience(audience || 'all');setOnlyFavorites(false);go('scripts')}
+  function goScript(audience) {setScriptAudience(audience || 'all');setScriptScenario('all');setScriptLimit(12);setOnlyFavorites(false);go('scripts')}
   function personalize(s) {return s.replaceAll('[имя]',personalName.trim()||'[имя]').replaceAll('[интерес]',personalInterest.trim()||'[интерес]')}
   async function copy(text) {
     try {await navigator.clipboard.writeText(text);setToast('Текст скопирован — можно отправлять ✨')}
@@ -78,15 +81,17 @@ export default function App() {
     ].slice(0,7)
   },[query])
   function openSearchResult(result) { if(result.view==='scripts')setScriptAudience(result.audience);if(result.view==='audiences')setSelectedAudience(result.id);if(result.view==='objections')setOpenedObjection(result.id);go(result.view) }
-  const filteredScripts=useMemo(()=>scripts.filter(s=>(scriptAudience==='all'||s.audience===scriptAudience)&&(!onlyFavorites||favoriteIds.includes(s.id))&&normalized(s.title+' '+s.full+' '+s.occasion).includes(normalized(scriptTerm))),[scriptAudience,onlyFavorites,favoriteIds,scriptTerm])
+  const filteredScripts=useMemo(()=>scripts.filter(s=>(scriptAudience==='all'||s.audience===scriptAudience)&&(scriptScenario==='all'||s.scenario===scriptScenario)&&(!onlyFavorites||favoriteIds.includes(s.id))&&normalized(s.title+' '+s.full+' '+s.short+' '+s.occasion+' '+audiences.find(a=>a.id===s.audience)?.title).includes(normalized(scriptTerm))),[scriptAudience,scriptScenario,onlyFavorites,favoriteIds,scriptTerm])
+  const visibleScripts=filteredScripts.slice(0,scriptLimit)
+  useEffect(()=>setScriptLimit(12),[scriptAudience,scriptScenario,scriptTerm,onlyFavorites])
+  const visibleAudiences=audiences.filter(a=>normalized(a.title+' '+a.subtitle+' '+a.description).includes(normalized(categorySearch)))
+  const pickAudiences=audiences.filter(a=>normalized(a.title+' '+a.subtitle).includes(normalized(pickCategorySearch)))
   const filteredObjections=useMemo(()=>objections.filter(o=>(objectionCategory==='Все'||o.category===objectionCategory)&&normalized(o.q+' '+o.a).includes(normalized(objectionTerm))),[objectionCategory,objectionTerm])
   const filteredFaq=useMemo(()=>faqs.map((f,i)=>({...f,index:i})).filter(f=>(faqCategory==='Все'||f.category===faqCategory)&&normalized(f.q+' '+f.a).includes(normalized(faqTerm))),[faqCategory,faqTerm])
-  const pickSelected = useMemo(() => {
-    if(pickGoal==='interested') return scripts.find(s=>s.id==='s13')
-    if(pickGoal==='reminder') return scripts.find(s=>s.id==='s14')
-    return scripts.find(s=>s.audience===pickAudience && !['s13','s14'].includes(s.id)) || scripts[0]
-  },[pickAudience,pickGoal])
-  const pickText = useMemo(() =>
+  const pickSelected = useMemo(() =>
+    scripts.find(s=>s.audience===pickAudience && s.scenario===pickGoal) || scripts[0],
+  [pickAudience,pickGoal])
+    const pickText = useMemo(() =>
     (pickSelected?.[pickLength]||'')
       .replaceAll('[имя]',pickName.trim()||'[имя]')
       .replaceAll('[интерес]',pickInterest.trim()||'[интерес]'),
@@ -97,7 +102,6 @@ export default function App() {
   const calc=Math.round(Math.max(0,Number(amount)||0)*rate/100)
   const remaining = points>=100?0:points>=50?100-points:points>=30?50-points:30-points
   const nextRate=points>=100?15:points>=50?15:points>=30?10:5
-  const progress=Math.round(completed.length/journey.length*100)
 
   return <div className="app-shell">
     {mobileOpen&&<button className="mobile-overlay" aria-label="Закрыть меню" onClick={()=>setMobileOpen(false)} />}
@@ -126,7 +130,7 @@ export default function App() {
         {view==='dashboard'&&<>
           <section className="hero">
             <div className="hero-content"><div className="hero-kicker"><span className="mini-star">✳</span> ТВОЁ КЛИЕНТСКОЕ ПРОСТРАНСТВО</div><h1>Лёгкие диалоги.<br/><em>Сильные отношения.</em></h1><p>Всё для уверенной работы с клиентами Siberian Wellness — от первого «привет» до долгосрочного знакомства с продуктом.</p><div className="hero-actions"><button className="btn btn-dark" onClick={()=>go('picker')}>Подобрать сообщение <I name="ArrowUpRight" size={17}/></button><button className="btn btn-glass" onClick={()=>goScript('all')}>Все скрипты <I name="ArrowRight" size={17}/></button></div></div>
-            <div className="hero-art" aria-hidden="true"><div className="orb orb-one"/><div className="orb orb-two"/><div className="glass-slab slab-back"><div className="slab-snow">✳</div></div><div className="glass-slab slab-front"><span>CLIENT EXPERIENCE</span><strong>01<span> / 07</span></strong><div className="fake-line"/><div className="fake-line short"/><div className="gold-rim"/></div><div className="floating-chip chip-one"><I name="Heart" size={15}/> Доверие</div><div className="floating-chip chip-two"><I name="Sparkles" size={15}/> Забота</div></div>
+            <div className="hero-art" aria-hidden="true"><div className="orb orb-one"/><div className="orb orb-two"/><div className="glass-slab slab-back"><div className="slab-snow">✳</div></div><div className="glass-slab slab-front"><span>CLIENT EXPERIENCE</span><strong>01<span> / SW</span></strong><div className="fake-line"/><div className="fake-line short"/><div className="gold-rim"/></div><div className="floating-chip chip-one"><I name="Heart" size={15}/> Доверие</div><div className="floating-chip chip-two"><I name="Sparkles" size={15}/> Забота</div></div>
           </section>
           <div className="stats-grid">
             {[{icon:'MessagesSquare',number:scripts.length,label:'Готовых скриптов',tone:'sage'},{icon:'UsersRound',number:audiences.length,label:'Категорий клиентов',tone:'peach'},{icon:'MessageCircleQuestion',number:objections.length,label:'Ответов на возражения',tone:'lavender'},{icon:'Heart',number:favoriteIds.length,label:'В избранном',tone:'gold'}].map(s=><div className="stat-card" key={s.label}><div className={'stat-icon '+s.tone}><I name={s.icon} size={21}/></div><strong>{s.number}</strong><p>{s.label}</p></div>)}
@@ -146,23 +150,28 @@ export default function App() {
             <button className="btn btn-dark" onClick={()=>copy(scripts[0].short)}><I name="Copy" size={17}/> Скопировать</button>
           </div>
           <div className="dashboard-bottom">
-            <div className="panel progress-panel"><div className="panel-top"><span className="eyebrow">ПРОГРЕСС КОМАНДЫ</span><Badge tone="mint">7 шагов</Badge></div><h2>Твой первый клиентский маршрут</h2><p>Небольшие действия каждый день помогут превратить знания в понятную систему.</p><div className="progress-row"><strong>{progress}%</strong><span>{completed.length} из 7 шагов выполнено</span></div><div className="progress-track"><div style={{width:progress+'%'}}/></div><button className="text-link" onClick={()=>go('plan')}>Продолжить обучение <I name="ArrowRight" size={17}/></button></div>
+            <div className="panel progress-panel">
+              <div className="panel-top"><span className="eyebrow">БЫСТРЫЙ ДОСТУП</span><Badge tone="mint">{scripts.length} готовых вариантов</Badge></div>
+              <h2>Нужный скрипт всегда под рукой</h2>
+              <p>Выбери одну из {audiences.length} категорий, а затем ситуацию: первое сообщение, продукция, кешбэк, подарки, вопрос, ответ заинтересовавшемуся или напоминание.</p>
+              <div className="quick-home-actions">
+                <button className="btn btn-dark" onClick={()=>go('picker')}><I name="WandSparkles" size={17}/> Подобрать скрипт</button>
+                <button className="btn btn-outline" onClick={()=>go('audiences')}>Все категории <I name="ArrowRight" size={16}/></button>
+              </div>
+            </div>
             <div className="panel quote-panel"><div className="quote-spark">✳</div><div className="eyebrow">НАША ФИЛОСОФИЯ</div><blockquote>«Сначала интерес человека.<br/>Потом — предложение.»</blockquote><p>Хорошая рекомендация начинается с уважения к выбору, а не с давления.</p></div>
           </div>
         </>}
 
         {view==='picker'&&<>
-          <PageTitle eyebrow="01 / БЫСТРЫЙ ИНСТРУМЕНТ" title="Подобрать скрипт за 10 секунд" desc="Три выбора — и нужное сообщение готово. Можно подставить имя, отредактировать текст и сразу скопировать." right={<Badge tone="mint"><I name="Zap" size={14}/> Без лишних шагов</Badge>}/>
+          <PageTitle eyebrow="01 / БЫСТРЫЙ ИНСТРУМЕНТ" title="Подобрать скрипт за 10 секунд" desc="Выбери категорию и ситуацию: получишь подходящий текст, который можно изменить и скопировать." right={<Badge tone="mint"><I name="Zap" size={14}/> Без лишних шагов</Badge>}/>
           <div className="quickpick-layout">
             <div className="panel pick-config">
               <div className="pick-heading"><span className="step-dot">1</span><div><h2>Кому пишем?</h2><p>Выбери, к какому окружению относится человек</p></div></div>
-              <div className="pick-audiences">{audiences.map(a=><button key={a.id} className={'pick-audience '+(pickAudience===a.id?'active':'')} onClick={()=>setPickAudience(a.id)}><I name={a.icon} size={17}/><span>{a.title}</span>{pickAudience===a.id&&<I name="Check" size={15}/>}</button>)}</div>
+              <div className="pick-category-search input-icon"><I name="Search" size={17}/><input aria-label="Найти категорию" value={pickCategorySearch} onChange={e=>setPickCategorySearch(e.target.value)} placeholder="Быстро найти категорию..."/></div><div className="pick-audiences">{pickAudiences.map(a=><button key={a.id} className={'pick-audience '+(pickAudience===a.id?'active':'')} onClick={()=>setPickAudience(a.id)}><I name={a.icon} size={17}/><span>{a.title}</span>{pickAudience===a.id&&<I name="Check" size={15}/>}</button>)}</div>
+              <div className="pick-count">{pickAudiences.length} из {audiences.length} категорий · выбери одну</div>
               <div className="pick-heading next-step"><span className="step-dot">2</span><div><h2>Какая ситуация?</h2><p>Предложение подберётся под задачу общения</p></div></div>
-              <div className="pick-goals">{[
-                {id:'first',name:'Первое приглашение',hint:'Познакомить с магазином',icon:'MessageSquare'},
-                {id:'interested',name:'Ответ «интересно»',hint:'Продолжить диалог',icon:'MessageCircle'},
-                {id:'reminder',name:'Мягкое напоминание',hint:'Если ответа пока нет',icon:'Clock3'}
-              ].map(g=><button key={g.id} className={'pick-goal '+(pickGoal===g.id?'active':'')} onClick={()=>setPickGoal(g.id)}><span className="goal-icon"><I name={g.icon} size={20}/></span><span><strong>{g.name}</strong><small>{g.hint}</small></span><I name={pickGoal===g.id?'CircleCheck':'Circle'} size={20}/></button>)}</div>
+              <div className="pick-goals">{scriptSituations.map(g=><button key={g.id} className={'pick-goal '+(pickGoal===g.id?'active':'')} onClick={()=>setPickGoal(g.id)}><span className="goal-icon"><I name={g.icon} size={20}/></span><span><strong>{g.title}</strong><small>{g.description}</small></span><I name={pickGoal===g.id?'CircleCheck':'Circle'} size={20}/></button>)}</div>
             </div>
             <div className="pick-preview-column">
               <div className="pick-preview">
@@ -188,16 +197,26 @@ export default function App() {
           </div>
         </>}
         {view==='audiences'&&<>
-          <PageTitle eyebrow="01 / ПОНИМАЕМ КЛИЕНТА" title="Категории клиентов" desc="Для каждого окружения — свой подход, подходящий тон и понятный первый шаг." right={<Badge tone="mint">{audiences.length} категорий</Badge>}/>
-          <div className="audience-grid">{audiences.map(a=><button className={'audience-card '+(selectedAudience===a.id?'selected':'')} key={a.id} onClick={()=>setSelectedAudience(selectedAudience===a.id?null:a.id)}><div className="audience-top"><span className={'audience-icon '+a.tint}><I name={a.icon} size={25}/></span><I name="ArrowUpRight" size={19}/></div><h3>{a.title}</h3><span className="subline">{a.subtitle}</span><p>{a.description}</p><div className="audience-bottom"><span>{scripts.filter(s=>s.audience===a.id).length} сценария / подборка</span><I name="ChevronRight" size={17}/></div></button>)}</div>
+          <PageTitle eyebrow="01 / ПОНИМАЕМ КЛИЕНТА" title="Категории клиентов" desc="Найди нужную категорию по типу знакомства или интересам. В каждой — семь сценариев." right={<Badge tone="mint">{audiences.length} категорий</Badge>}/>
+          <div className="category-toolbar"><div className="input-icon"><I name="Search" size={18}/><input value={categorySearch} onChange={e=>setCategorySearch(e.target.value)} placeholder="Найти категорию по названию или интересу..."/></div><span>{visibleAudiences.length} категорий</span></div>
+          <div className="audience-grid">{visibleAudiences.map(a=><button className={'audience-card '+(selectedAudience===a.id?'selected':'')} key={a.id} onClick={()=>setSelectedAudience(selectedAudience===a.id?null:a.id)}><div className="audience-top"><span className={'audience-icon '+a.tint}><I name={a.icon} size={25}/></span><I name="ArrowUpRight" size={19}/></div><h3>{a.title}</h3><span className="subline">{a.subtitle}</span><p>{a.description}</p><div className="audience-bottom"><span>{scripts.filter(s=>s.audience===a.id).length} вариантов скриптов</span><I name="ChevronRight" size={17}/></div></button>)}</div>
           {selectedAudience&&(()=>{const a=audiences.find(x=>x.id===selectedAudience);return a?<div className="detail-panel"><div className="detail-panel-head"><div><span className="eyebrow">СТРАТЕГИЯ ОБЩЕНИЯ</span><h2>{a.title} — как начать разговор</h2></div><button className="icon-button" aria-label="Закрыть" onClick={()=>setSelectedAudience(null)}><I name="X" size={20}/></button></div><div className="detail-grid"><div><span className="detail-caption">ОТ ЧЕГО ОТТАЛКИВАТЬСЯ</span><p><I name="Target" size={18}/>{a.hook}</p></div><div><span className="detail-caption">ЧТО ДЕЛАТЬ</span><p><I name="CheckCircle2" size={18}/>{a.approach}</p></div><div><span className="detail-caption">ЧЕГО ИЗБЕГАТЬ</span><p><I name="ShieldAlert" size={18}/>{a.avoid}</p></div></div><button className="btn btn-dark" onClick={()=>goScript(a.id)}>Смотреть готовые сообщения <I name="ArrowRight" size={17}/></button></div>:null})()}
         </>}
         {view==='scripts'&&<>
-          <PageTitle eyebrow="02 / СЛОВА, КОТОРЫЕ ПОМОГАЮТ" title="Библиотека скриптов" desc="Выбирай аудиторию, подставляй имя, меняй тон и копируй готовое сообщение." right={<button className="btn btn-outline" onClick={()=>{setOnlyFavorites(!onlyFavorites);setScriptAudience('all')}}><I name="Heart" size={17} fill={onlyFavorites?'currentColor':'none'}/>{onlyFavorites?'Все скрипты':'Избранное'} <span className="count-pill">{favoriteIds.length}</span></button>}/>
+          <PageTitle eyebrow="02 / СЛОВА, КОТОРЫЕ ПОМОГАЮТ" title="Библиотека скриптов" desc="Быстро находи сценарии по категории, ситуации и ключевым словам; копируй в один клик." right={<button className="btn btn-outline" onClick={()=>{setOnlyFavorites(!onlyFavorites);setScriptAudience('all')}}><I name="Heart" size={17} fill={onlyFavorites?'currentColor':'none'}/>{onlyFavorites?'Все скрипты':'Избранное'} <span className="count-pill">{favoriteIds.length}</span></button>}/>
           <div className="script-toolbar panel"><div className="script-toolbar-main"><div className="field compact"><label>Имя получателя</label><input value={personalName} onChange={e=>setPersonalName(e.target.value)} placeholder="Например, Анна"/></div><div className="field compact"><label>Интерес человека</label><input value={personalInterest} onChange={e=>setPersonalInterest(e.target.value)} placeholder="Например, уход за кожей"/></div><div className="field compact script-search"><label>Поиск сценария</label><div className="input-icon"><I name="Search" size={16}/><input value={scriptTerm} onChange={e=>setScriptTerm(e.target.value)} placeholder="По названию или тексту"/></div></div></div><div className="toolbar-hint"><I name="WandSparkles" size={16}/> Поля [имя] и [интерес] автоматически заменятся в сообщениях. Редактируй текст под свой голос.</div></div>
-          <div className="filter-bar"><div className="chip-scroll"><button className={'filter-chip '+(scriptAudience==='all'?'active':'')} onClick={()=>setScriptAudience('all')}>Все сообщения</button>{audiences.map(a=><button key={a.id} className={'filter-chip '+(scriptAudience===a.id?'active':'')} onClick={()=>setScriptAudience(a.id)}>{a.title}</button>)}</div><SwitchTabs items={[{id:'full',title:'Развёрнутые'},{id:'short',title:'Короткие'}]} value={scriptMode} onChange={setScriptMode}/></div>
+          <div className="script-filters">
+            <div className="field"><label htmlFor="audience-select">Категория человека</label>
+              <select id="audience-select" value={scriptAudience} onChange={e=>setScriptAudience(e.target.value)}><option value="all">Все категории ({audiences.length})</option>{audiences.map(a=><option key={a.id} value={a.id}>{a.title}</option>)}</select>
+            </div>
+            <div className="field"><label htmlFor="scenario-select">Ситуация</label>
+              <select id="scenario-select" value={scriptScenario} onChange={e=>setScriptScenario(e.target.value)}><option value="all">Все ситуации</option>{scriptSituations.map(x=><option key={x.id} value={x.id}>{x.title}</option>)}</select>
+            </div>
+            <div className="mode-toggle"><label>Формат сообщения</label><SwitchTabs items={[{id:'full',title:'Подробные'},{id:'short',title:'Короткие'}]} value={scriptMode} onChange={setScriptMode}/></div>
+          </div>
           <div className="results-count">Найдено сообщений: <strong>{filteredScripts.length}</strong></div>
-          {filteredScripts.length?<div className="scripts-grid">{filteredScripts.map((s,i)=>{const audience=audiences.find(x=>x.id===s.audience);const value=personalize(s[scriptMode]);return <article className="script-card" key={s.id}><div className="script-card-head"><div className="script-number">{String(i+1).padStart(2,'0')}</div><div className="script-card-title"><h3>{s.title}</h3><span>{s.occasion}</span></div><button className={'fav-button '+(favoriteIds.includes(s.id)?'on':'')} aria-label="Добавить в избранное" onClick={()=>toggleFavorite(s.id)}><I name="Heart" size={19} fill={favoriteIds.includes(s.id)?'currentColor':'none'}/></button></div><div className="script-text">{value}</div><div className="script-card-footer"><Badge tone={audience?.tint||'mint'}>{audience?.title}</Badge><button className="copy-button" onClick={()=>copy(value)}><I name="Copy" size={16}/> Копировать <I name="ArrowUpRight" size={15}/></button></div></article>})}</div>:<Empty title="Пока ничего не найдено" description="Попробуй другую категорию или очисти поиск." action={<button className="btn btn-outline" onClick={()=>{setScriptAudience('all');setScriptTerm('');setOnlyFavorites(false)}}>Сбросить фильтры</button>}/>}
+          {filteredScripts.length?<div className="scripts-grid">{visibleScripts.map((s,i)=>{const audience=audiences.find(x=>x.id===s.audience);const value=personalize(s[scriptMode]);return <article className="script-card" key={s.id}><div className="script-card-head"><div className="script-number">{String(i+1).padStart(2,'0')}</div><div className="script-card-title"><h3>{s.title}</h3><span>{audience?.title} · {s.occasion}</span></div><button className={'fav-button '+(favoriteIds.includes(s.id)?'on':'')} aria-label="Добавить в избранное" onClick={()=>toggleFavorite(s.id)}><I name="Heart" size={19} fill={favoriteIds.includes(s.id)?'currentColor':'none'}/></button></div><div className="script-text">{value}</div><div className="script-card-footer"><Badge tone={audience?.tint||'mint'}>{audience?.title}</Badge><button className="copy-button" onClick={()=>copy(value)}><I name="Copy" size={16}/> Копировать <I name="ArrowUpRight" size={15}/></button></div></article>})}</div>:<Empty title="Пока ничего не найдено" description="Попробуй другую категорию или очисти поиск." action={<button className="btn btn-outline" onClick={()=>{setScriptAudience('all');setScriptTerm('');setOnlyFavorites(false)}}>Сбросить фильтры</button>}/>}
+          {filteredScripts.length>scriptLimit&&<div className="load-more"><span>Показано {visibleScripts.length} из {filteredScripts.length}</span><button className="btn btn-outline" onClick={()=>setScriptLimit(n=>n+12)}>Показать ещё 12 <I name="ChevronDown" size={16}/></button></div>}
           <div className="note-box"><I name="Info" size={19}/><p>Шаблоны — отправная точка, а не массовая рассылка. Пиши конкретному человеку, не делай недоказанных заявлений о продукции и уважай отказ.</p></div>
         </>}
         {view==='benefits'&&<>
@@ -222,12 +241,7 @@ export default function App() {
           <div className="resource-toolbar"><div className="input-icon"><I name="Search" size={18}/><input value={faqTerm} onChange={e=>setFaqTerm(e.target.value)} placeholder="Поиск по базе знаний..."/></div><div className="chip-scroll">{['Все',...new Set(faqs.map(f=>f.category))].map(c=><button key={c} className={'filter-chip '+(c===faqCategory?'active':'')} onClick={()=>setFaqCategory(c)}>{c}</button>)}</div></div>
           <div className="faq-layout"><div className="accordion-list">{filteredFaq.map(f=><div className={'accordion '+(openedFaq===f.index?'open':'')} key={f.index}><button className="accordion-button" onClick={()=>setOpenedFaq(openedFaq===f.index?-1:f.index)}><span className="faq-question-icon"><I name="CircleHelp" size={19}/></span><span className="accordion-text"><strong>{f.q}</strong><small>{f.category}</small></span><I name={openedFaq===f.index?'Minus':'Plus'} size={19}/></button>{openedFaq===f.index&&<div className="accordion-body faq-answer"><p>{f.a}</p><button className="copy-button" onClick={()=>copy(f.a)}><I name="Copy" size={16}/> Копировать ответ</button></div>}</div>)}</div><aside className="faq-aside"><div className="faq-aside-icon"><I name="BookOpen" size={27}/></div><h3>Знание рождает уверенность</h3><p>Лучше спокойно объяснить условия, чем обещать клиенту то, чего нет в программе.</p><hr/><span className="eyebrow">ИСТОЧНИК</span><p className="small">{programSource}</p><a href="https://siberianwellness.com" target="_blank" rel="noreferrer" className="text-link">Проверить условия <I name="ArrowUpRight" size={16}/></a></aside></div>
         </>}
-        {view==='plan'&&<>
-          <PageTitle eyebrow="07 / ОТ ЗНАНИЙ К ДЕЙСТВИЯМ" title="План на 7 дней" desc="Простой маршрут для новичка: изучаем, знакомимся, помогаем выбрать и анализируем." right={<Badge tone="mint">{progress}% выполнено</Badge>}/>
-          <div className="plan-hero"><div><span className="eyebrow">ТВОЙ ПРОГРЕСС</span><h2>Маленькие действия.<br/>Большая системность.</h2><p>Отмечай выполненные задания — прогресс сохранится в браузере.</p></div><div className="plan-ring" style={{background:'conic-gradient(#c8ad76 '+progress+'%,rgba(255,255,255,.15) '+progress+'%)'}}><div><strong>{progress}%</strong><small>ГОТОВО</small></div></div></div>
-          <div className="plan-steps">{journey.map((j,i)=><div className={'plan-step '+(completed.includes(i)?'done':'')} key={i}><div className="plan-step-number">{String(j.day).padStart(2,'0')}</div><div className="plan-step-content"><div className="eyebrow">ДЕНЬ {j.day}</div><h3>{j.title}</h3><p>{j.desc}</p><span className="plan-prompt"><I name="Lightbulb" size={15}/> {j.task}</span></div><button className={'complete-button '+(completed.includes(i)?'done':'')} onClick={()=>setCompleted(old=>old.includes(i)?old.filter(x=>x!==i):[...old,i])}><I name={completed.includes(i)?'CheckCircle2':'Circle'} size={19}/>{completed.includes(i)?'Выполнено':'Отметить'}</button></div>)}</div><div className="plan-final"><div><I name="PartyPopper" size={25}/><h3>Главное — создавать доверие</h3><p>Цель недели — не количество продаж, а качественные диалоги и понимание клиентских потребностей.</p></div><button className="btn btn-outline" onClick={()=>{setCompleted([]);setToast('Прогресс недели сброшен')}}>Начать заново <I name="RotateCcw" size={16}/></button></div>
-        </>}
-        <footer className="page-footer"><span>✳ SW CLIENT STUDIO</span><span>С заботой о клиенте · Для команды Siberian Wellness</span><span>Версия 1.1 · 2026</span></footer>
+        <footer className="page-footer"><span>✳ SW CLIENT STUDIO</span><span>С заботой о клиенте · Для команды Siberian Wellness</span><span>Версия 1.2 · 2026</span></footer>
       </main>
     </div>
     {toast&&<div className="toast"><I name="CheckCircle2" size={18}/>{toast}</div>}
