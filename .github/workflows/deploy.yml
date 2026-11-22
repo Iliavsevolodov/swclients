@@ -1,17 +1,26 @@
-name: Deploy SW Client Studio
+name: Build and publish SW Client Studio
 
 on:
   push:
     branches: [main]
+    paths:
+      - 'src/**'
+      - 'app/**'
+      - 'public/**'
+      - 'scripts/**'
+      - 'vite.config.js'
+      - 'package.json'
+      - 'index.html'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
 concurrency:
-  group: pages
+  group: swclients-build
   cancel-in-progress: true
 
 jobs:
@@ -20,25 +29,48 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: true
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Runtime render smoke test
+      - name: Test React views and scripts
         run: npm run test:smoke
-      - name: Build
+      - name: Compile static site
         run: npm run build
+      - name: Persist compiled site for branch-based GitHub Pages
+        run: |
+          rm -rf docs
+          mkdir -p docs
+          cp -R dist/. docs/
+          touch docs/.nojekyll
+          git add docs
+          if ! git diff --cached --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "build: refresh compiled static site"
+            git push
+          fi
+      - name: Prepare GitHub Actions Pages artifact
+        run: |
+          mkdir -p pages-artifact
+          cp index.html pages-artifact/index.html
+          cp -R dist pages-artifact/docs
+          touch pages-artifact/.nojekyll
       - name: Upload website
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: pages-artifact
   deploy:
     environment:
       name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: build
     steps:
       - name: Deploy
+        id: deployment
         uses: actions/deploy-pages@v4
