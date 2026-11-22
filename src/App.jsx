@@ -4,20 +4,13 @@ import { audiences, scripts, objections, faqs, journey, benefits, programSource 
 
 const MENU = [
   {id:'dashboard',title:'Обзор',icon:'LayoutDashboard'},
+  {id:'picker',title:'Быстрый подбор скрипта',icon:'WandSparkles'},
   {id:'audiences',title:'Категории клиентов',icon:'UsersRound'},
   {id:'scripts',title:'Библиотека скриптов',icon:'MessagesSquare'},
   {id:'benefits',title:'Выгоды и бонусы',icon:'Gift'},
   {id:'objections',title:'Работа с возражениями',icon:'MessageCircleQuestion'},
   {id:'faq',title:'База знаний / FAQ',icon:'BookOpenText'},
-  {id:'clients',title:'Мои клиенты',icon:'ContactRound'},
   {id:'plan',title:'План на 7 дней',icon:'CalendarCheck2'},
-]
-const stages = [
-  {id:'new',title:'Новый контакт',color:'gray'},
-  {id:'talk',title:'Общаемся',color:'blue'},
-  {id:'catalog',title:'Отправлен каталог',color:'violet'},
-  {id:'customer',title:'Покупатель',color:'green'},
-  {id:'pause',title:'Пауза',color:'gold'},
 ]
 function I({name,size=18,...props}) { const Component=Icon[name] || Icon.Sparkles; return <Component size={size} strokeWidth={1.85} {...props} /> }
 function storeState(key, initial) {
@@ -27,9 +20,6 @@ function storeState(key, initial) {
   useEffect(() => { try { localStorage.setItem('swclient_'+key, JSON.stringify(value)) } catch {} }, [key,value])
   return [value,setValue]
 }
-function initials(value) { return (value || '?').trim().split(/\s+/).slice(0,2).map(x=>x[0]?.toUpperCase()).join('') }
-function normalized(s) { return String(s||'').toLocaleLowerCase('ru-RU') }
-function formatDate(value) { if(!value)return 'Не назначено';const [y,m,d]=value.split('-');return d+'.'+m+'.'+y }
 function SwitchTabs({items,value,onChange}) { return <div className="tabs">{items.map(t=><button className={'tab '+(value===t.id?'active':'')} key={t.id} onClick={()=>onChange(t.id)}>{t.title}</button>)}</div> }
 function PageTitle({eyebrow,title,desc,right}) { return <div className="page-heading"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1>{desc && <p>{desc}</p>}</div>{right && <div className="heading-actions">{right}</div>}</div> }
 function Empty({icon='SearchX',title,description,action}) {return <div className="empty-state"><div className="empty-icon"><I name={icon} size={28}/></div><h3>{title}</h3><p>{description}</p>{action}</div>}
@@ -41,12 +31,15 @@ export default function App() {
   const [mobileOpen,setMobileOpen] = useState(false)
   const [query,setQuery] = useState('')
   const [favoriteIds,setFavoriteIds] = storeState('favorites',[])
-  const [clients,setClients] = storeState('clients',[])
   const [completed,setCompleted] = storeState('journey',[])
-  const [myName,setMyName] = storeState('name','')
-  const [clientModal,setClientModal] = useState(null)
   const [toast,setToast] = useState('')
   const [selectedAudience,setSelectedAudience] = useState(null)
+  const [pickAudience,setPickAudience] = useState('friends')
+  const [pickGoal,setPickGoal] = useState('first')
+  const [pickLength,setPickLength] = useState('short')
+  const [pickName,setPickName] = useState('')
+  const [pickInterest,setPickInterest] = useState('')
+  const [pickDraft,setPickDraft] = useState('')
   const [scriptAudience,setScriptAudience] = useState('all')
   const [scriptTerm,setScriptTerm] = useState('')
   const [scriptMode,setScriptMode] = useState('full')
@@ -61,8 +54,6 @@ export default function App() {
   const [faqTerm,setFaqTerm] = useState('')
   const [points,setPoints] = useState(100)
   const [amount,setAmount] = useState(4800)
-  const [clientSearch,setClientSearch] = useState('')
-  const [stageFilter,setStageFilter] = useState('all')
 
   useEffect(()=>{ if(!toast)return;const t=setTimeout(()=>setToast(''),2900);return()=>clearTimeout(t) },[toast])
   function go(next) { setView(next);setMobileOpen(false);setQuery('');window.scrollTo({top:0,behavior:'smooth'}) }
@@ -87,31 +78,23 @@ export default function App() {
   const filteredScripts=useMemo(()=>scripts.filter(s=>(scriptAudience==='all'||s.audience===scriptAudience)&&(!onlyFavorites||favoriteIds.includes(s.id))&&normalized(s.title+' '+s.full+' '+s.occasion).includes(normalized(scriptTerm))),[scriptAudience,onlyFavorites,favoriteIds,scriptTerm])
   const filteredObjections=useMemo(()=>objections.filter(o=>(objectionCategory==='Все'||o.category===objectionCategory)&&normalized(o.q+' '+o.a).includes(normalized(objectionTerm))),[objectionCategory,objectionTerm])
   const filteredFaq=useMemo(()=>faqs.map((f,i)=>({...f,index:i})).filter(f=>(faqCategory==='Все'||f.category===faqCategory)&&normalized(f.q+' '+f.a).includes(normalized(faqTerm))),[faqCategory,faqTerm])
-  const filteredClients=useMemo(()=>clients.filter(c=>(stageFilter==='all'||c.stage===stageFilter)&&normalized(c.name+' '+c.note).includes(normalized(clientSearch))).sort((a,b)=>(a.next||'9999').localeCompare(b.next||'9999')),[clients,clientSearch,stageFilter])
+  const pickSelected = useMemo(() => {
+    if(pickGoal==='interested') return scripts.find(s=>s.id==='s13')
+    if(pickGoal==='reminder') return scripts.find(s=>s.id==='s14')
+    return scripts.find(s=>s.audience===pickAudience && !['s13','s14'].includes(s.id)) || scripts[0]
+  },[pickAudience,pickGoal])
+  const pickText = useMemo(() =>
+    (pickSelected?.[pickLength]||'')
+      .replaceAll('[имя]',pickName.trim()||'[имя]')
+      .replaceAll('[интерес]',pickInterest.trim()||'[интерес]'),
+    [pickSelected,pickLength,pickName,pickInterest]
+  )
+  useEffect(()=>setPickDraft(pickText),[pickText])
   const rate=points>=100?15:points>=50?10:points>=30?5:0
   const calc=Math.round(Math.max(0,Number(amount)||0)*rate/100)
   const remaining = points>=100?0:points>=50?100-points:points>=30?50-points:30-points
   const nextRate=points>=100?15:points>=50?15:points>=30?10:5
   const progress=Math.round(completed.length/journey.length*100)
-
-  function saveClient(item) {
-    if(!item.name?.trim()){setToast('Укажите имя контакта');return}
-    if(item.id) setClients(old=>old.map(c=>c.id===item.id?item:c))
-    else setClients(old=>[{...item,id:String(Date.now()),created:new Date().toISOString().slice(0,10)},...old])
-    setClientModal(null);setToast('Карточка сохранена')
-  }
-  function deleteClient(id) {if(window.confirm('Удалить карточку клиента?')){setClients(old=>old.filter(c=>c.id!==id));setToast('Карточка удалена')}}
-  function exportClients() {
-    const blob=new Blob([JSON.stringify({version:1,exported:new Date().toISOString(),clients},null,2)],{type:'application/json'})
-    const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='swclients-backup.json';a.click();URL.revokeObjectURL(url);setToast('Резервная копия выгружена')
-  }
-  async function importClients(file) {
-    if(!file)return
-    try {const data=JSON.parse(await file.text());if(!Array.isArray(data.clients)||!data.clients.every(x=>x.name&&x.id))throw new Error();if(!window.confirm('Заменить текущие карточки данными из файла?'))return;setClients(data.clients);setToast('Карточки восстановлены')}
-    catch{setToast('Не удалось прочитать файл резервной копии')}
-  }
-  function clientStage(id,stage) {setClients(old=>old.map(c=>c.id===id?{...c,stage}:c))}
-  function openNewClient() {setClientModal({name:'',audience:'friends',stage:'new',note:'',next:''})}
 
   return <div className="app-shell">
     {mobileOpen&&<button className="mobile-overlay" aria-label="Закрыть меню" onClick={()=>setMobileOpen(false)} />}
@@ -133,30 +116,72 @@ export default function App() {
             <I name="Search" size={18}/><input aria-label="Поиск по базе" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Поиск по всей базе..."/>{query&&<button aria-label="Очистить" className="clear-search" onClick={()=>setQuery('')}><I name="X" size={16}/></button>}
             {query.trim()&&<div className="search-results">{lookup.length?lookup.map(r=><button key={r.sub+r.id} onClick={()=>openSearchResult(r)}><span className="result-icon"><I name={r.view==='scripts'?'MessageSquare':r.view==='audiences'?'Users':'CircleHelp'} size={17}/></span><span><strong>{r.title}</strong><small>{r.sub}</small></span><I name="ArrowUpRight" size={16}/></button>):<div className="no-results">По запросу ничего не найдено</div>}</div>}
           </div>
-          <button className="avatar-button" title="Мой недельный план" onClick={()=>go('plan')}><I name="CheckCheck" size={19}/></button>
+          <button className="avatar-button" title="Быстрый подбор сообщения" onClick={()=>go('picker')}><I name="WandSparkles" size={19}/></button>
         </div>
       </header>
       <main className="content">
         {view==='dashboard'&&<>
           <section className="hero">
-            <div className="hero-content"><div className="hero-kicker"><span className="mini-star">✳</span> ТВОЁ КЛИЕНТСКОЕ ПРОСТРАНСТВО</div><h1>Лёгкие диалоги.<br/><em>Сильные отношения.</em></h1><p>Всё для уверенной работы с клиентами Siberian Wellness — от первого «привет» до долгосрочного знакомства с продуктом.</p><div className="hero-actions"><button className="btn btn-dark" onClick={()=>goScript('all')}>Подобрать сообщение <I name="ArrowUpRight" size={17}/></button><button className="btn btn-glass" onClick={()=>go('plan')}>План на неделю <I name="ArrowRight" size={17}/></button></div></div>
+            <div className="hero-content"><div className="hero-kicker"><span className="mini-star">✳</span> ТВОЁ КЛИЕНТСКОЕ ПРОСТРАНСТВО</div><h1>Лёгкие диалоги.<br/><em>Сильные отношения.</em></h1><p>Всё для уверенной работы с клиентами Siberian Wellness — от первого «привет» до долгосрочного знакомства с продуктом.</p><div className="hero-actions"><button className="btn btn-dark" onClick={()=>go('picker')}>Подобрать сообщение <I name="ArrowUpRight" size={17}/></button><button className="btn btn-glass" onClick={()=>goScript('all')}>Все скрипты <I name="ArrowRight" size={17}/></button></div></div>
             <div className="hero-art" aria-hidden="true"><div className="orb orb-one"/><div className="orb orb-two"/><div className="glass-slab slab-back"><div className="slab-snow">✳</div></div><div className="glass-slab slab-front"><span>CLIENT EXPERIENCE</span><strong>01<span> / 07</span></strong><div className="fake-line"/><div className="fake-line short"/><div className="gold-rim"/></div><div className="floating-chip chip-one"><I name="Heart" size={15}/> Доверие</div><div className="floating-chip chip-two"><I name="Sparkles" size={15}/> Забота</div></div>
           </section>
           <div className="stats-grid">
-            {[{icon:'MessagesSquare',number:scripts.length,label:'Готовых скриптов',tone:'sage'},{icon:'UsersRound',number:audiences.length,label:'Категорий клиентов',tone:'peach'},{icon:'MessageCircleQuestion',number:objections.length,label:'Ответов на возражения',tone:'lavender'},{icon:'ContactRound',number:clients.length,label:'Контактов в работе',tone:'gold'}].map(s=><div className="stat-card" key={s.label}><div className={'stat-icon '+s.tone}><I name={s.icon} size={21}/></div><strong>{s.number}</strong><p>{s.label}</p></div>)}
+            {[{icon:'MessagesSquare',number:scripts.length,label:'Готовых скриптов',tone:'sage'},{icon:'UsersRound',number:audiences.length,label:'Категорий клиентов',tone:'peach'},{icon:'MessageCircleQuestion',number:objections.length,label:'Ответов на возражения',tone:'lavender'},{icon:'Heart',number:favoriteIds.length,label:'В избранном',tone:'gold'}].map(s=><div className="stat-card" key={s.label}><div className={'stat-icon '+s.tone}><I name={s.icon} size={21}/></div><strong>{s.number}</strong><p>{s.label}</p></div>)}
           </div>
           <div className="section-label-row"><div><div className="eyebrow">НАВИГАЦИЯ</div><h2>Всё под рукой</h2></div><span className="muted-caption">Начни с нужного инструмента</span></div>
           <div className="feature-grid">
             {[
-              {id:'audiences',icon:'UsersRound',n:'01',title:'Понять клиента',desc:'Категории, потребности и точки входа в разговор',tone:'sage'},
-              {id:'scripts',icon:'MessagesSquare',n:'02',title:'Найти правильные слова',desc:'Готовые сообщения с персонализацией и копированием',tone:'peach'},
+              {id:'picker',icon:'WandSparkles',n:'01',title:'Подобрать за 10 секунд',desc:'Выбери человека и ситуацию — скрипт готов к копированию',tone:'sage'},
+              {id:'scripts',icon:'MessagesSquare',n:'02',title:'Открыть все скрипты',desc:'Поиск, фильтры, короткие версии и любимые шаблоны',tone:'peach'},
               {id:'benefits',icon:'Gift',n:'03',title:'Показать выгоду',desc:'Кешбэк, подарки, условия и интерактивный расчёт',tone:'gold'},
               {id:'objections',icon:'MessageCircleQuestion',n:'04',title:'Ответить уверенно',desc:'Частые сомнения и экологичные варианты ответов',tone:'lavender'},
             ].map(item=><button className="feature-card" key={item.id} onClick={()=>go(item.id)}><div className="feature-top"><span className={'feature-icon '+item.tone}><I name={item.icon} size={25}/></span><span className="feature-number">{item.n}</span></div><h3>{item.title}</h3><p>{item.desc}</p><span className="feature-link">Открыть раздел <I name="ArrowUpRight" size={17}/></span></button>)}
           </div>
+          <div className="instant-copy">
+            <div className="instant-copy-icon"><I name="CopyCheck" size={23}/></div>
+            <div className="instant-copy-main"><span className="eyebrow">СКРИПТ НАЧАЛА ДИАЛОГА</span><strong>Первое сообщение другу — в один клик</strong><p>{scripts[0].short}</p></div>
+            <button className="btn btn-dark" onClick={()=>copy(scripts[0].short)}><I name="Copy" size={17}/> Скопировать</button>
+          </div>
           <div className="dashboard-bottom">
             <div className="panel progress-panel"><div className="panel-top"><span className="eyebrow">ПРОГРЕСС КОМАНДЫ</span><Badge tone="mint">7 шагов</Badge></div><h2>Твой первый клиентский маршрут</h2><p>Небольшие действия каждый день помогут превратить знания в понятную систему.</p><div className="progress-row"><strong>{progress}%</strong><span>{completed.length} из 7 шагов выполнено</span></div><div className="progress-track"><div style={{width:progress+'%'}}/></div><button className="text-link" onClick={()=>go('plan')}>Продолжить обучение <I name="ArrowRight" size={17}/></button></div>
             <div className="panel quote-panel"><div className="quote-spark">✳</div><div className="eyebrow">НАША ФИЛОСОФИЯ</div><blockquote>«Сначала интерес человека.<br/>Потом — предложение.»</blockquote><p>Хорошая рекомендация начинается с уважения к выбору, а не с давления.</p></div>
+          </div>
+        </>}
+
+        {view==='picker'&&<>
+          <PageTitle eyebrow="01 / БЫСТРЫЙ ИНСТРУМЕНТ" title="Подобрать скрипт за 10 секунд" desc="Три выбора — и нужное сообщение готово. Можно подставить имя, отредактировать текст и сразу скопировать." right={<Badge tone="mint"><I name="Zap" size={14}/> Без лишних шагов</Badge>}/>
+          <div className="quickpick-layout">
+            <div className="panel pick-config">
+              <div className="pick-heading"><span className="step-dot">1</span><div><h2>Кому пишем?</h2><p>Выбери, к какому окружению относится человек</p></div></div>
+              <div className="pick-audiences">{audiences.map(a=><button key={a.id} className={'pick-audience '+(pickAudience===a.id?'active':'')} onClick={()=>setPickAudience(a.id)}><I name={a.icon} size={17}/><span>{a.title}</span>{pickAudience===a.id&&<I name="Check" size={15}/>}</button>)}</div>
+              <div className="pick-heading next-step"><span className="step-dot">2</span><div><h2>Какая ситуация?</h2><p>Предложение подберётся под задачу общения</p></div></div>
+              <div className="pick-goals">{[
+                {id:'first',name:'Первое приглашение',hint:'Познакомить с магазином',icon:'MessageSquare'},
+                {id:'interested',name:'Ответ «интересно»',hint:'Продолжить диалог',icon:'MessageCircle'},
+                {id:'reminder',name:'Мягкое напоминание',hint:'Если ответа пока нет',icon:'Clock3'}
+              ].map(g=><button key={g.id} className={'pick-goal '+(pickGoal===g.id?'active':'')} onClick={()=>setPickGoal(g.id)}><span className="goal-icon"><I name={g.icon} size={20}/></span><span><strong>{g.name}</strong><small>{g.hint}</small></span><I name={pickGoal===g.id?'CircleCheck':'Circle'} size={20}/></button>)}</div>
+            </div>
+            <div className="pick-preview-column">
+              <div className="pick-preview">
+                <div className="pick-preview-header"><div><span className="eyebrow">ТВОЙ ГОТОВЫЙ СКРИПТ</span><h2>{pickSelected?.title}</h2></div><I name="Sparkles" size={23}/></div>
+                <div className="pick-length-row"><span>Длина сообщения</span><SwitchTabs items={[{id:'short',title:'Короткий'},{id:'full',title:'Подробный'}]} value={pickLength} onChange={setPickLength}/></div>
+                <div className="pick-names">
+                  <div className="field compact"><label htmlFor="quick-name">Имя</label><input id="quick-name" value={pickName} onChange={e=>setPickName(e.target.value)} placeholder="Как зовут человека"/></div>
+                  <div className="field compact"><label htmlFor="quick-interest">Интерес</label><input id="quick-interest" value={pickInterest} onChange={e=>setPickInterest(e.target.value)} placeholder="Например, косметика"/></div>
+                </div>
+                <label className="draft-label" htmlFor="quick-draft">Сообщение · можно отредактировать</label>
+                <textarea id="quick-draft" className="pick-draft" rows={10} value={pickDraft} onChange={e=>setPickDraft(e.target.value)} />
+                <div className="pick-preview-actions">
+                  <button className="btn btn-outline" onClick={()=>setPickDraft(pickText)}><I name="RotateCcw" size={17}/> Вернуть оригинал</button>
+                  <button className="btn btn-dark pick-copy" onClick={()=>copy(pickDraft)} disabled={!pickDraft.trim()}><I name="Copy" size={18}/> Скопировать скрипт</button>
+                </div>
+                <div className="pick-ethical"><I name="HeartHandshake" size={18}/><span>Персонализируй приглашение, не дави на человека и проверяй актуальные условия программы.</span></div>
+              </div>
+              <div className="pick-links">
+                <button onClick={()=>goScript(pickAudience)}><I name="MessagesSquare" size={20}/><span><strong>Посмотреть другие варианты</strong><small>Все скрипты для этой аудитории</small></span><I name="ArrowUpRight" size={18}/></button>
+                <button onClick={()=>go('objections')}><I name="MessageCircleQuestion" size={20}/><span><strong>Ответить на сомнение</strong><small>База коротких ответов</small></span><I name="ArrowUpRight" size={18}/></button>
+              </div>
+            </div>
           </div>
         </>}
         {view==='audiences'&&<>
@@ -194,22 +219,14 @@ export default function App() {
           <div className="resource-toolbar"><div className="input-icon"><I name="Search" size={18}/><input value={faqTerm} onChange={e=>setFaqTerm(e.target.value)} placeholder="Поиск по базе знаний..."/></div><div className="chip-scroll">{['Все',...new Set(faqs.map(f=>f.category))].map(c=><button key={c} className={'filter-chip '+(c===faqCategory?'active':'')} onClick={()=>setFaqCategory(c)}>{c}</button>)}</div></div>
           <div className="faq-layout"><div className="accordion-list">{filteredFaq.map(f=><div className={'accordion '+(openedFaq===f.index?'open':'')} key={f.index}><button className="accordion-button" onClick={()=>setOpenedFaq(openedFaq===f.index?-1:f.index)}><span className="faq-question-icon"><I name="CircleHelp" size={19}/></span><span className="accordion-text"><strong>{f.q}</strong><small>{f.category}</small></span><I name={openedFaq===f.index?'Minus':'Plus'} size={19}/></button>{openedFaq===f.index&&<div className="accordion-body faq-answer"><p>{f.a}</p><button className="copy-button" onClick={()=>copy(f.a)}><I name="Copy" size={16}/> Копировать ответ</button></div>}</div>)}</div><aside className="faq-aside"><div className="faq-aside-icon"><I name="BookOpen" size={27}/></div><h3>Знание рождает уверенность</h3><p>Лучше спокойно объяснить условия, чем обещать клиенту то, чего нет в программе.</p><hr/><span className="eyebrow">ИСТОЧНИК</span><p className="small">{programSource}</p><a href="https://siberianwellness.com" target="_blank" rel="noreferrer" className="text-link">Проверить условия <I name="ArrowUpRight" size={16}/></a></aside></div>
         </>}
-        {view==='clients'&&<>
-          <PageTitle eyebrow="06 / ТВОИ ДИАЛОГИ" title="Мои клиенты" desc="Личный трекер контактов, следующих шагов и этапов знакомства с компанией." right={<button className="btn btn-dark" onClick={openNewClient}><I name="Plus" size={18}/> Добавить контакт</button>}/>
-          <div className="local-notice"><I name="LockKeyhole" size={19}/><span><strong>Личный режим.</strong> Карточки хранятся только в браузере этого устройства, не синхронизируются с командой и не передаются на сервер. Не добавляй чувствительные сведения.</span></div>
-          <div className="pipeline">{stages.map(s=><button key={s.id} onClick={()=>setStageFilter(stageFilter===s.id?'all':s.id)} className={'pipeline-item '+(stageFilter===s.id?'selected':'')}><div className={'pipeline-dot '+s.color}/><strong>{clients.filter(c=>c.stage===s.id).length}</strong><span>{s.title}</span></button>)}</div>
-          <div className="client-controls"><div className="input-icon"><I name="Search" size={18}/><input value={clientSearch} onChange={e=>setClientSearch(e.target.value)} placeholder="Поиск контакта..."/></div><button className="btn btn-outline small" onClick={exportClients} disabled={!clients.length}><I name="Download" size={17}/> Экспорт</button><label className="btn btn-outline small upload-button"><I name="Upload" size={17}/> Импорт<input type="file" accept=".json,application/json" onChange={e=>{importClients(e.target.files?.[0]);e.target.value=''}}/></label></div>
-          {clients.length?<div className="clients-list">{filteredClients.map(c=>{const a=audiences.find(x=>x.id===c.audience);const s=stages.find(x=>x.id===c.stage);return <div className="client-row" key={c.id}><div className="client-avatar">{initials(c.name)}</div><div className="client-identity"><h3>{c.name}</h3><span>{a?.title||'Без категории'} · {c.note||'Без заметки'}</span></div><div className="client-next"><small>Следующий контакт</small><strong>{formatDate(c.next)}</strong></div><select className={'stage-select '+s?.color} value={c.stage} aria-label="Этап клиента" onChange={e=>clientStage(c.id,e.target.value)}>{stages.map(x=><option value={x.id} key={x.id}>{x.title}</option>)}</select><button className="icon-button" title="Редактировать" onClick={()=>setClientModal({...c})}><I name="Pencil" size={17}/></button><button className="icon-button danger" title="Удалить" onClick={()=>deleteClient(c.id)}><I name="Trash2" size={17}/></button></div>})}{!filteredClients.length&&<Empty title="Контакты не найдены" description="Попробуй изменить поисковый запрос или фильтр."/>}</div>:<Empty icon="ContactRound" title="Начни с первого контакта" description="Добавь человека, с которым общаешься, отметь этап и следующий шаг. История останется на этом устройстве." action={<button className="btn btn-dark" onClick={openNewClient}><I name="Plus" size={18}/> Добавить первый контакт</button>}/>}
-        </>}
         {view==='plan'&&<>
           <PageTitle eyebrow="07 / ОТ ЗНАНИЙ К ДЕЙСТВИЯМ" title="План на 7 дней" desc="Простой маршрут для новичка: изучаем, знакомимся, помогаем выбрать и анализируем." right={<Badge tone="mint">{progress}% выполнено</Badge>}/>
           <div className="plan-hero"><div><span className="eyebrow">ТВОЙ ПРОГРЕСС</span><h2>Маленькие действия.<br/>Большая системность.</h2><p>Отмечай выполненные задания — прогресс сохранится в браузере.</p></div><div className="plan-ring" style={{background:'conic-gradient(#c8ad76 '+progress+'%,rgba(255,255,255,.15) '+progress+'%)'}}><div><strong>{progress}%</strong><small>ГОТОВО</small></div></div></div>
           <div className="plan-steps">{journey.map((j,i)=><div className={'plan-step '+(completed.includes(i)?'done':'')} key={i}><div className="plan-step-number">{String(j.day).padStart(2,'0')}</div><div className="plan-step-content"><div className="eyebrow">ДЕНЬ {j.day}</div><h3>{j.title}</h3><p>{j.desc}</p><span className="plan-prompt"><I name="Lightbulb" size={15}/> {j.task}</span></div><button className={'complete-button '+(completed.includes(i)?'done':'')} onClick={()=>setCompleted(old=>old.includes(i)?old.filter(x=>x!==i):[...old,i])}><I name={completed.includes(i)?'CheckCircle2':'Circle'} size={19}/>{completed.includes(i)?'Выполнено':'Отметить'}</button></div>)}</div><div className="plan-final"><div><I name="PartyPopper" size={25}/><h3>Главное — создавать доверие</h3><p>Цель недели — не количество продаж, а качественные диалоги и понимание клиентских потребностей.</p></div><button className="btn btn-outline" onClick={()=>{setCompleted([]);setToast('Прогресс недели сброшен')}}>Начать заново <I name="RotateCcw" size={16}/></button></div>
         </>}
-        <footer className="page-footer"><span>✳ SW CLIENT STUDIO</span><span>С заботой о клиенте · Для команды Siberian Wellness</span><span>Версия 1.0 · 2026</span></footer>
+        <footer className="page-footer"><span>✳ SW CLIENT STUDIO</span><span>С заботой о клиенте · Для команды Siberian Wellness</span><span>Версия 1.1 · 2026</span></footer>
       </main>
     </div>
     {toast&&<div className="toast"><I name="CheckCircle2" size={18}/>{toast}</div>}
-    {clientModal&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setClientModal(null)}}><div className="client-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div className="modal-header"><div><span className="eyebrow">КАРТОЧКА КОНТАКТА</span><h2 id="modal-title">{clientModal.id?'Изменить контакт':'Новый контакт'}</h2></div><button className="icon-button" aria-label="Закрыть" onClick={()=>setClientModal(null)}><I name="X" size={21}/></button></div><form onSubmit={e=>{e.preventDefault();saveClient(clientModal)}}><div className="field"><label htmlFor="client-name">Имя *</label><input id="client-name" autoFocus required value={clientModal.name} onChange={e=>setClientModal({...clientModal,name:e.target.value})} placeholder="Как зовут человека"/></div><div className="modal-cols"><div className="field"><label htmlFor="client-audience">Категория</label><select id="client-audience" value={clientModal.audience} onChange={e=>setClientModal({...clientModal,audience:e.target.value})}>{audiences.map(a=><option value={a.id} key={a.id}>{a.title}</option>)}</select></div><div className="field"><label htmlFor="client-stage">Этап</label><select id="client-stage" value={clientModal.stage} onChange={e=>setClientModal({...clientModal,stage:e.target.value})}>{stages.map(s=><option value={s.id} key={s.id}>{s.title}</option>)}</select></div></div><div className="field"><label htmlFor="client-next">Следующий контакт</label><input id="client-next" type="date" value={clientModal.next} onChange={e=>setClientModal({...clientModal,next:e.target.value})}/></div><div className="field"><label htmlFor="client-note">Заметка (без чувствительных данных)</label><textarea id="client-note" rows={3} value={clientModal.note} onChange={e=>setClientModal({...clientModal,note:e.target.value})} placeholder="Например: интересуется парфюмерией; договорились отправить каталог"/></div><div className="modal-footer"><button type="button" className="btn btn-outline" onClick={()=>setClientModal(null)}>Отмена</button><button type="submit" className="btn btn-dark"><I name="Check" size={17}/> Сохранить</button></div></form></div></div>}
   </div>
 }
