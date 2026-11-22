@@ -20,6 +20,7 @@ function storeState(key, initial) {
   useEffect(() => { try { localStorage.setItem('swclient_'+key, JSON.stringify(value)) } catch {} }, [key,value])
   return [value,setValue]
 }
+function normalized(value) { return String(value ?? '').toLocaleLowerCase('ru-RU') }
 function SwitchTabs({items,value,onChange}) { return <div className="tabs">{items.map(t=><button className={'tab '+(value===t.id?'active':'')} key={t.id} onClick={()=>onChange(t.id)}>{t.title}</button>)}</div> }
 function PageTitle({eyebrow,title,desc,right}) { return <div className="page-heading"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1>{desc && <p>{desc}</p>}</div>{right && <div className="heading-actions">{right}</div>}</div> }
 function Empty({icon='SearchX',title,description,action}) {return <div className="empty-state"><div className="empty-icon"><I name={icon} size={28}/></div><h3>{title}</h3><p>{description}</p>{action}</div>}
